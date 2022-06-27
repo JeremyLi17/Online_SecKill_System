@@ -1,5 +1,8 @@
 package com.jeremy.seckill.web;
 
+import com.alibaba.csp.sentinel.Entry;
+import com.alibaba.csp.sentinel.SphU;
+import com.alibaba.csp.sentinel.slots.block.BlockException;
 import com.alibaba.fastjson.JSON;
 import com.jeremy.seckill.db.dao.OrderDao;
 import com.jeremy.seckill.db.dao.SeckillActivityDao;
@@ -16,12 +19,14 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.ModelAndView;
 
 import javax.annotation.Resource;
 import java.math.BigDecimal;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
@@ -70,9 +75,16 @@ public class SeckillActivityController {
 
     @RequestMapping("/seckills")
     public String activityList(Map<String, Object> resultMap) {
-        List<SeckillActivity> seckillActivities = seckillActivityDao.querySeckillActivitysByStatus(1);
-        resultMap.put("seckillActivities", seckillActivities);
-        return "seckill_activity";
+
+        try (Entry entry = SphU.entry("seckills")) {
+            List<SeckillActivity> seckillActivities =
+                    seckillActivityDao.querySeckillActivitysByStatus(1);
+            resultMap.put("seckillActivities", seckillActivities);
+            return "seckill_activity";
+        } catch (BlockException ex) {
+            log.error("查询秒杀活动列表被限流" + ex.toString());
+            return "wait";
+        }
     }
 
     @Autowired
@@ -221,5 +233,17 @@ public class SeckillActivityController {
     public String payOrder(@PathVariable String orderNo) throws Exception {
         seckillActivityService.payOrderProcess(orderNo);
         return "redirect:/seckill/orderQuery/" + orderNo;
+    }
+
+    /**
+     * 获取当前服务器端的时间
+     * @return
+     */
+    @ResponseBody
+    @RequestMapping("/seckill/getSystemTime")
+    public String getSystemTime() {
+        SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        String date = df.format(new Date());
+        return date;
     }
 }
